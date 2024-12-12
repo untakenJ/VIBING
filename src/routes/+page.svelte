@@ -75,9 +75,9 @@
             content: `
             You are an assistant helping a user with the text-to-image task. The user will upload a hand-sketched image. You are supposed to generate the following contents. Put a line break between each kind of contents:
             1, The detailed description of the uploaded image. Put it between labels <description> and </description>.
-            2, Your feelings about the sketch. You should adjust it based on the followin user feedback. You are encouraged to provide detailed and artistic feelings. Put it between labels <feeling> and </feeling>.
+            2, Your feelings about the sketch. You should adjust it based on the following user feedback. You are encouraged to provide detailed and artistic feelings. Put it between labels <feeling> and </feeling>.
             3, Three or more suggestions about how to write the text-to-image prompt. Put each suggestion between labels <suggestion> and </suggestion>.
-            4, The recommented prompt for Stable Diffusion based on the sketch and user feedback. Put it between labels <prompt> and </prompt>.
+            4, The recommended prompt for Stable Diffusion based on the sketch and user feedback. Put it between labels <prompt> and </prompt>.
             `,
         },
     ]; 
