@@ -1176,6 +1176,7 @@
         <!-- Image upload -->
         <h2>Assistant</h2>
         <h3>Sketch Upload</h3>
+        <p>You can upload a sketch image to help the assistant generate the image. The assistant will generate a description of the sketch and give you suggestions for the prompt.</p>
         <div class="image-upload-input">
             <input type="file" accept="image/*" on:change={handleFileChange} />
             <button on:click={uploadImage} disabled={imageLoading}>
@@ -1224,7 +1225,7 @@
                 id="chat-input-box"
                 type="text"
                 bind:value={chatInput}
-                placeholder="Type your message..."
+                placeholder="Type your message for suggestions from the assistant..."
                 aria-label="Chat input"
                 on:keydown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
                 disabled={isChatLoading || imageLoading || imageUrl==""}
