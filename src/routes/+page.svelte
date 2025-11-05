@@ -54,7 +54,7 @@
     let globalOptimizedPrompt = "";
 
     // API keys
-    const GPT_API_KEY = import.meta.env.VITE_GPT_API_KEY;
+    const GPT_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
     let imageFile; // To store the selected file
     let imageUrl = ""; // To store the uploaded image URL
@@ -272,7 +272,8 @@
             }
         } finally {
             isImageGenLoading = false;
-            promptInputValue = ''; // Clear input after submission
+            // Keep prompt in text box for easy modification
+            // promptInputValue = ''; // Clear input after submission
             control_image = null; // Reset control image after submission
             if (canvas && imageElement) {
                 const ctx = canvas.getContext('2d');
@@ -561,18 +562,89 @@
     }
 
     function extractTextBetweenTags(inputText: string, tagName: string): string[] {
+        // Convert input to string
+        const text = String(inputText);
+        
+        // Escape special regex characters in tagName
+        const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
         // Construct a dynamic regular expression based on the tag name
-        const tagRegex = new RegExp(`<${tagName}>(.*?)</${tagName}>`, 'g');
+        // Match opening tag, content (non-greedy), and closing tag
+        const tagRegex = new RegExp(`<${escapedTagName}\\s*>([\\s\\S]*?)</${escapedTagName}\\s*>`, 'gi');
         let matches: string[] = [];
         let match;
+        
+        // Reset regex lastIndex to ensure we start from the beginning
+        tagRegex.lastIndex = 0;
+        
         // Iterate through all matches
-        while ((match = tagRegex.exec(inputText.replace(/(\r\n|\n|\r)/gm, ""))) !== null) {
-            if (match[1]) {
-                matches.push(match[1].trim()); // Trim to remove extra spaces if needed
+        while ((match = tagRegex.exec(text)) !== null) {
+            if (match[1] !== undefined) {
+                // Get the content between tags
+                let content = match[1];
+                
+                // Remove any nested or malformed tags of the same type
+                // This handles cases where tags might be nested or malformed
+                const nestedTagRegex = new RegExp(`<\\s*/?\\s*${escapedTagName}[^>]*>`, 'gi');
+                content = content.replace(nestedTagRegex, '');
+                
+                // Clean up whitespace: normalize all whitespace to single spaces
+                content = content.replace(/\s+/g, ' ');
+                
+                // Trim leading and trailing whitespace
+                content = content.trim();
+                
+                // Only add if content is not empty and doesn't start with tag-like text
+                if (content.length > 0 && !content.match(/^<\s*/)) {
+                    matches.push(content);
+                }
             }
         }
 
         return matches;
+    }
+
+    // Function to get the latest recommended prompt from assistant messages
+    function getLatestRecommendedPrompt(): string | null {
+        // Find the latest assistant message (excluding "Typing...")
+        for (let i = chatMessagesChat.length - 1; i >= 0; i--) {
+            const message = chatMessagesChat[i];
+            if (message.role === "assistant") {
+                // Check if content is a string and not "Typing..."
+                const contentStr = typeof message.content === 'string' ? message.content : String(message.content);
+                if (contentStr !== "Typing...") {
+                    const prompts = extractTextBetweenTags(contentStr, "prompt");
+                    if (prompts.length > 0) {
+                        // Return the first (or combined) prompt
+                        return prompts.join(" ");
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // Function to apply the latest recommended prompt and generate image
+    async function applyLatestRecommendedPrompt() {
+        const recommendedPrompt = getLatestRecommendedPrompt();
+        if (!recommendedPrompt) {
+            alert("No recommended prompt available. Please wait for the assistant to provide a recommendation.");
+            return;
+        }
+
+        // Set the prompt to the input field
+        promptInputValue = recommendedPrompt;
+
+        // Scroll to top before generating the image
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        // Generate the image
+        await callStability(false);
+    }
+
+    // Check if there's a recommended prompt available
+    function hasRecommendedPrompt(): boolean {
+        return getLatestRecommendedPrompt() !== null;
     }
 
     // Handle feedback submission
@@ -628,33 +700,48 @@
 
 <style>
     :root {
-        /* Dark Mode Colors */
-        --bg-color: #1e1e1e;
-        --text-color: #f5f5f5;
-        --secondary-text-color: #cccccc;
-        --error-color: #ff6b6b;
-        --button-bg-color: #3a3a3a;
-        --button-hover-color: #575757;
-        --button-disabled-color: #2a2a2a;
-        --undo-button-color: #c0392b;
-        --undo-button-hover-color: #96281b;
-        --bot-bg-color: #2c3e50;
-        --user-bg-color: #2980b9;
-        --input-bg-color: #2c3e50;
+        /* Modern Dark Mode Colors - More User Friendly */
+        --bg-color: #1a1a1f;
+        --bg-secondary: #252530;
+        --text-color: #e8e8ed;
+        --text-secondary: #b8b8c3;
+        --text-muted: #90909a;
+        --error-color: #ff6b82;
+        --button-bg-color: #4a4a5a;
+        --button-hover-color: #5a5a6a;
+        --button-active-color: #6a6a7a;
+        --button-disabled-color: #2a2a35;
+        --button-primary-bg: #6366f1;
+        --button-primary-hover: #7c7ef8;
+        --undo-button-color: #ef4444;
+        --undo-button-hover-color: #f87171;
+        --bot-bg-color: #2d2d3a;
+        --user-bg-color: #6366f1;
+        --input-bg-color: #2d2d3a;
+        --input-border-color: #3a3a4a;
+        --input-focus-border: #6366f1;
+        --border-color: #3a3a4a;
+        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
     
-        --font-family: 'arial', sans-serif;
+        /* Modern Font Stack */
+        --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
         --title-font-size: 2rem;
         --message-font-size: 1rem;
+        --line-height: 1.6;
     }
 
     :global(html) {
         font-family: var(--font-family);
-        background-color: #241d1dd1;
+        background: linear-gradient(135deg, #1a1a1f 0%, #242429 100%);
+        background-attachment: fixed;
         color: var(--text-color);
         transition: background-color 0.3s, color 0.3s;
-        margin: 0; /* Remove default margin */
-        padding: 0; /* Remove default padding */
-        min-height: 100vh; /* Ensure body covers full viewport height */
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        line-height: var(--line-height);
     }
 
 
@@ -662,50 +749,69 @@
     .parent-container {
         display: flex;
         justify-content: center;
-        align-items: flex-start; /* Align items to the top */
-        gap: 20px;
-        padding: 20px;
+        align-items: flex-start;
+        gap: 24px;
+        padding: 24px;
         flex-wrap: wrap;
+        max-width: 1400px;
+        margin: 0 auto;
     }
 
     /* Shared Box Styling */
     .box {
-        background-color: var(--bg-color);
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        flex: 1 1 300px; /* Flexible width */
+        background-color: var(--bg-secondary);
+        padding: 24px 28px 28px 28px;
+        border-radius: 16px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-color);
+        flex: 1 1 300px;
         max-width: 800px;
         min-width: 250px;
         height: fit-content;
-        transition: background-color 0.3s;
+        transition: all 0.3s ease;
     }
 
-    /* Remove individual container and chatbot-pane styles and use the shared .box class */
-    .container, .chatbot-pane {
-        /* Inherit styles from .box */
+    .box:hover {
+        box-shadow: var(--shadow-lg);
+        border-color: var(--input-focus-border);
     }
+
+    /* Container and chatbot-pane inherit styles from .box */
 
     /* Title Styling */
-    h1, h2, h3 {
+    h1, h2, h3, h4 {
         font-family: var(--font-family);
         color: var(--text-color);
+        font-weight: 600;
+        letter-spacing: -0.02em;
     }
 
     h1, h2 {
         font-size: 2rem;
         text-align: center;
-        margin-bottom: 30px;
+        margin-top: 0;
+        margin-bottom: 24px;
+        font-weight: 700;
+        color: var(--text-color);
     }
 
     h3 {
         font-size: 1.25rem;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
+        font-weight: 600;
+    }
+
+    h4 {
+        font-size: 1.1rem;
+        margin-top: 20px;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: var(--text-color);
     }
 
     /* Chat Messages Styling */
     .chat-messages {
-        max-height: 400px;
+        max-height: 600px;
         overflow-y: auto;
         margin-bottom: 15px;
     }
@@ -725,31 +831,69 @@
     }
 
     .chat-message p {
-        padding: 10px 15px;
-        border-radius: 20px;
-        max-width: 80%;
+        padding: 12px 18px;
+        border-radius: 18px;
+        max-width: 75%;
+        width: fit-content;
         word-wrap: break-word;
+        word-break: normal;
         font-size: var(--message-font-size);
         font-family: var(--font-family);
+        line-height: var(--line-height);
+        box-sizing: border-box;
     }
 
     .bot-response {
-        padding: 10px 15px;
-        border-radius: 20px;
+        padding: 16px 18px;
+        border-radius: 12px;
         max-width: 80%;
+        width: 100%;
         word-wrap: break-word;
+        word-break: normal;
+        text-align: left;
         font-size: var(--message-font-size);
         font-family: var(--font-family);
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
+        line-height: var(--line-height);
+        box-sizing: border-box;
+    }
+
+    .bot-response h4 {
+        text-align: left;
+        margin-top: 12px;
+        margin-bottom: 6px;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .bot-response h4:first-child {
+        margin-top: 0;
+    }
+
+    .bot-response p {
+        text-align: left;
+        margin-bottom: 8px;
+        margin-left: 0;
+        margin-right: 0;
+        padding-left: 0;
+        padding-right: 0;
+        max-width: 90%;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .chat-message.user p {
-        background-color: var(--user-bg-color);
+        background: linear-gradient(135deg, var(--user-bg-color) 0%, var(--button-primary-hover) 100%);
         color: white;
+        box-shadow: var(--shadow-sm);
+        text-align: left;
     }
 
     .chat-message.bot p {
-        /*background-color: var(--bot-bg-color);*/
         color: var(--text-color);
+        background-color: var(--bg-color);
+        text-align: left;
     }
 
     /* Input and Button Styling */
@@ -759,41 +903,97 @@
         gap: 15px;
     }
 
+    .chat-buttons {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .chat-buttons button {
+        flex: 1;
+    }
+
+    .button-container {
+        display: flex;
+        gap: 12px;
+        align-items: stretch;
+    }
+
+    .button-container button {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .apply-prompt-button {
+        background-color: var(--button-bg-color);
+    }
+
+    .apply-prompt-button:hover:not(:disabled) {
+        background-color: var(--button-hover-color);
+    }
+
+    .send-button {
+        background-color: var(--button-primary-bg) !important;
+    }
+
+    .send-button:hover:not(:disabled) {
+        background-color: var(--button-primary-hover) !important;
+    }
+
     input[type="text"], input[type="file"], .chat-input input[type="text"], textarea[type="text"] {
-        padding: 12px 20px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
+        padding: 14px 18px;
+        border: 1px solid var(--input-border-color);
+        border-radius: 12px;
         font-size: var(--message-font-size);
-        transition: border-color 0.3s;
+        transition: all 0.2s ease;
         font-family: var(--font-family);
         background-color: var(--input-bg-color);
         color: var(--text-color);
+        line-height: var(--line-height);
     }
 
-    input[type="text"]:focus, input[type="file"]:focus, .chat-input input[type="text"]:focus {
-        border-color: var(--button-bg-color);
+    input[type="text"]:focus, input[type="file"]:focus, .chat-input input[type="text"]:focus, textarea[type="text"]:focus {
+        border-color: var(--input-focus-border);
         outline: none;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        background-color: var(--bg-color);
+    }
+
+    textarea[type="text"] {
+        resize: vertical;
+        min-height: 100px;
     }
 
     button {
-        padding: 12px 20px;
+        padding: 12px 24px;
         background-color: var(--button-bg-color);
         color: white;
         border: none;
-        border-radius: 20px; /* Uniform button shape */
+        border-radius: 12px;
         font-size: 1rem;
+        font-weight: 500;
         cursor: pointer;
-        transition: background-color 0.3s;
+        transition: all 0.2s ease;
         font-family: var(--font-family);
+        box-shadow: var(--shadow-sm);
     }
 
     button:disabled {
         background-color: var(--button-disabled-color);
         cursor: not-allowed;
+        opacity: 0.5;
+        box-shadow: none;
     }
 
     button:hover:not(:disabled) {
         background-color: var(--button-hover-color);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+    }
+
+    button:active:not(:disabled) {
+        transform: translateY(0);
+        background-color: var(--button-active-color);
     }
 
     /* Specific Button Styling for Undo */
@@ -824,16 +1024,24 @@
         font-size: 0.875rem;
         color: var(--text-color);
         font-family: var(--font-family);
+        font-weight: 500;
     }
 
     .brush-controls input[type="range"] {
         width: 150px;
+        accent-color: var(--button-primary-bg);
     }
 
     /* Response Styling */
     .response {
         text-align: left;
         margin-top: 30px;
+    }
+
+    .response p {
+        color: var(--text-secondary);
+        line-height: var(--line-height);
+        margin-bottom: 12px;
     }
 
     .image-container {
@@ -844,8 +1052,9 @@
     .image-container img {
         max-width: 100%;
         height: auto;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-color);
     }
 
     canvas {
@@ -859,35 +1068,70 @@
     .message {
         text-align: center;
         font-size: 1.125rem;
-        color: var(--secondary-text-color);
+        color: var(--text-secondary);
         margin-top: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
     }
 
     .error {
         color: var(--error-color);
+        background-color: rgba(255, 107, 130, 0.1);
+        border-color: var(--error-color);
     }
 
     /* History Styling */
     .history {
         margin-top: 40px;
-        width: 20%;
+        width: 15%;
+        min-width: 200px;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 8px;
+    }
+
+    /* Custom scrollbar styling for history */
+    .history::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .history::-webkit-scrollbar-track {
+        background: var(--bg-color);
+        border-radius: 4px;
+    }
+
+    .history::-webkit-scrollbar-thumb {
+        background: var(--button-bg-color);
+        border-radius: 4px;
+    }
+
+    .history::-webkit-scrollbar-thumb:hover {
+        background: var(--button-hover-color);
     }
 
     .history-item {
         display: flex;
-        align-items: center;
-        gap: 15px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
         margin-bottom: 20px;
-        padding: 10px;
-        background-color: #ffffff;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        padding: 14px;
+        background-color: var(--bg-color);
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border-color);
         cursor: pointer;
-        transition: background-color 0.3s;
+        transition: all 0.2s ease;
     }
 
     .history-item:hover {
-        background-color: #f1f1f1;
+        background-color: var(--bg-secondary);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        border-color: var(--input-focus-border);
     }
 
     .history-item.generated {
@@ -903,9 +1147,9 @@
     }
 
     .history-item img {
-        width: 100px;
+        width: 100%;
         height: auto;
-        border-radius: 5px;
+        border-radius: 8px;
         object-fit: cover;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
@@ -917,11 +1161,11 @@
     }
 
     .prompt-section .prompt {
-        font-size: 1rem;
-        /* color: var(--text-color); */
-        color: black;
+        font-size: 0.95rem;
+        color: var(--text-color);
         margin: 0;
         font-family: var(--font-family);
+        line-height: var(--line-height);
     }
 
     .type-and-download {
@@ -932,13 +1176,13 @@
 
     .type {
         font-size: 0.875rem;
-        color: #777;
+        color: var(--text-muted);
     }
 
     .timestamp {
         font-size: 0.75rem;
-        color: #999;
-        margin-top: 3px;
+        color: var(--text-muted);
+        margin-top: 6px;
     }
 
     /* Responsive Design */
@@ -964,11 +1208,6 @@
             padding: 10px 15px;
         }
 
-        .history-item {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
         .history-item img {
             width: 100%;
         }
@@ -985,18 +1224,36 @@
     }
 
     .optimized-prompt {
-        font-size: 1.0rem; /* Smaller font size for fine print */
-        color: var(--secondary-text-color); /* Use secondary text color */
-        font-family: var(--font-family); /* Ensure consistent font */
-        margin-top: 10px; /* Spacing above the prompt */
-        text-align: center; /* Center align the text */
+        font-size: 0.95rem;
+        color: var(--text-secondary);
+        font-family: var(--font-family);
+        margin-top: 12px;
+        text-align: center;
+        padding: 12px;
+        background-color: var(--bg-color);
+        border-radius: 8px;
+        border-left: 3px solid var(--button-primary-bg);
     }
 
     .response .optimized-prompt {
-        font-style: italic; /* Italicize for distinction */
+        font-style: italic;
     }
 
+    /* Link Styling */
+    a {
+        color: #7c7ef8;
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
 
+    a:hover {
+        color: #9ca3f9;
+        text-decoration: underline;
+    }
+
+    a:visited {
+        color: #a5a6f6;
+    }
 
 </style>
 
@@ -1006,7 +1263,11 @@
         <div class="history">
             <h3>History</h3>
             {#each generatedImages.reverse() as item, index}
-                <div class="history-item" on:click={currentGeneratedImage=generatedImages[generatedImages.length - index - 1]}>
+                <div class="history-item" on:click={() => {
+                    const selectedImage = generatedImages[generatedImages.length - index - 1];
+                    currentGeneratedImage = selectedImage;
+                    promptInputValue = selectedImage.prompt;
+                }}>
                     <img src={item.imageUrl} alt={"Image " + (index + 1)} />
                     <div class="prompt-section">
                         <p class="prompt">Prompt: {item.prompt}</p>
@@ -1044,11 +1305,11 @@
                 {is_loading ? 'Generating...' : 'Generate'}
             </button>
             -->
-            <div class="button-container" style="display:flex">
-                <button on:click={callStability} disabled={isImageGenLoading} style="width:50%;display:inline-block">
+            <div class="button-container">
+                <button on:click={callStability} disabled={isImageGenLoading}>
                     {isImageGenLoading ? 'Generating...' : 'Generate with Prompt'}
                 </button>
-                <button on:click={generateImageWithSketch} disabled={isImageGenLoading || !currentGeneratedImage} style="width:50%;display:inline-block">
+                <button on:click={generateImageWithSketch} disabled={isImageGenLoading || !currentGeneratedImage}>
                     {isImageGenLoading ? 'Generating...' : 'Generate with Prompt and Image'}
                 </button>
             </div>
@@ -1205,7 +1466,7 @@
                             {#each extractTextBetweenTags(message.content, "suggestion") as d}
                                 <p>- {d}</p>
                             {/each}
-                            <h4>Recommended Prompt</h4>
+                            <h4>Suggested Prompt</h4>
                             {#each extractTextBetweenTags(message.content, "prompt") as d}
                                 <p>{d}</p>
                             {/each} 
@@ -1231,9 +1492,23 @@
                 disabled={isChatLoading || imageLoading || imageUrl==""}
                 rows="3" 
             ></textarea>
-            <button on:click={sendChatMessage} disabled={isChatLoading || imageLoading || imageUrl==""}>
-                {isChatLoading ? 'Sending...' : 'Send'}
-            </button>
+            <div class="chat-buttons">
+                <button 
+                    on:click={applyLatestRecommendedPrompt} 
+                    disabled={isImageGenLoading || isChatLoading || !hasRecommendedPrompt()}
+                    class="apply-prompt-button"
+                    title="Apply the latest recommended prompt to Generate Image"
+                >
+                    {isImageGenLoading ? 'Generating...' : 'Apply Suggested Prompt'}
+                </button>
+                <button 
+                    on:click={sendChatMessage} 
+                    disabled={isChatLoading || imageLoading || imageUrl==""}
+                    class="send-button"
+                >
+                    {isChatLoading ? 'Sending...' : 'Send'}
+                </button>
+            </div>
         </div>
     </div>
 </div>

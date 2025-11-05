@@ -16,6 +16,37 @@ npx sv create
 npx sv create my-app
 ``` -->
 
+## Installation
+
+First, install the dependencies:
+
+```bash
+npm install
+```
+
+**Note**: The project uses `@sveltejs/adapter-node` for Node.js deployment. If you haven't installed it yet, it will be installed with `npm install`.
+
+## Environment Setup
+
+Before running the application, you need to configure the required API keys.
+
+1. Copy the example environment file:
+   ```bash
+   cp env.example .env.local
+   ```
+
+2. Edit `.env.local` and fill in your actual API keys:
+   - `VITE_OPENAI_API_KEY`: Your OpenAI API key (for GPT-4o-mini, used for image description and chat assistant)
+   - `VITE_IMGBB_API_KEY`: Your ImgBB API key (for image upload)
+   - `VITE_STABILITY_KEY`: Your Stability AI API key (for image generation)
+
+   You can obtain these API keys from:
+   - OpenAI: https://platform.openai.com/api-keys
+   - ImgBB: https://api.imgbb.com/
+   - Stability AI: https://platform.stability.ai/
+
+3. Save the `.env.local` file (it will be ignored by git)
+
 ## Developing
 
 Once you've installed dependencies with `npm install` , start a development server:
@@ -27,19 +58,76 @@ npm run dev
 npm run dev -- --open
 ```
 
-## Building
+## Building for Production
 
-**Please note that the production version hasn't been tested yet. Our user studies are based on the dev version. We are continuing developing this application!**
+### Prerequisites
 
-~~To create a production version of your app:~~
+Before building for production, ensure you have configured the environment variables:
 
-```bash
-# npm run build
-```
+1. **For local production build and preview:**
+   ```bash
+   cp env.production.example .env.production
+   ```
+   
+   Edit `.env.production` and fill in your actual API keys (same as development):
+   - `VITE_OPENAI_API_KEY`: Your OpenAI API key
+   - `VITE_IMGBB_API_KEY`: Your ImgBB API key
+   - `VITE_STABILITY_KEY`: Your Stability AI API key
 
-~~You can preview the production build with `npm run preview`.~~
+2. **For deployment platforms** (Vercel, Netlify, etc.):
+   - Configure the environment variables in your platform's dashboard/settings
+   - The same three variables are required: `VITE_OPENAI_API_KEY`, `VITE_IMGBB_API_KEY`, `VITE_STABILITY_KEY`
 
-> ~~To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.~~
+### Build Commands
+
+1. **Build the production version:**
+   ```bash
+   npm run build
+   ```
+   This will create an optimized production build. The output location depends on the adapter:
+   - For `adapter-auto`: Typically `.output` directory
+   - The build process will optimize your code and create a production-ready version
+
+2. **Preview the production build locally:**
+   ```bash
+   npm run preview
+   ```
+   This starts a local server to preview the production build (default port: 4173).
+
+### Deployment
+
+The project uses `@sveltejs/adapter-node` for Node.js deployment, which is suitable for platforms like Render, Railway, or any Node.js hosting environment.
+
+#### Deploying to Render
+
+1. **Create a new Web Service** on Render:
+   - Connect your GitHub repository
+   - Select "Web Service"
+
+2. **Configure Build & Start Commands**:
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+   - **Environment**: `Node`
+
+3. **Set Environment Variables** in Render dashboard:
+   - `VITE_OPENAI_API_KEY`: Your OpenAI API key
+   - `VITE_IMGBB_API_KEY`: Your ImgBB API key
+   - `VITE_STABILITY_KEY`: Your Stability AI API key
+
+4. **Deploy**: Render will automatically build and deploy your application
+
+#### Other Deployment Platforms
+
+- **Vercel/Netlify**: May need to switch back to `@sveltejs/adapter-auto` or use platform-specific adapters
+- **Node.js servers**: Current setup with `adapter-node` is ready
+- **Static hosting**: Would require switching to `@sveltejs/adapter-static`
+
+**Important**: When deploying to production, make sure to set the environment variables in your hosting platform's environment settings. The required variables are:
+- `VITE_OPENAI_API_KEY`
+- `VITE_IMGBB_API_KEY`
+- `VITE_STABILITY_KEY`
+
+> For more information about adapters, see [SvelteKit adapters documentation](https://svelte.dev/docs/kit/adapters).
 
 ## Demo
 Once the service is running with `npm run dev`, you may access the application through the browser. The default port would be `5173`. The final version of our application can be accessed with [http://localhost:5173](http://localhost:5173) and the baseline system is at [http://localhost:5173/vibing_baseline](http://localhost:5173/vibing_baseline).

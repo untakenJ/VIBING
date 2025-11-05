@@ -2,10 +2,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
 import type { RequestHandler } from './$types';
 
-import { env } from '$env/dynamic/private';
-
 const openai = createOpenAI({
-  apiKey: env.OPENAI_API_KEY ?? '',
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY ?? '',
 });
 
 export const POST = (async ({ request }) => {
