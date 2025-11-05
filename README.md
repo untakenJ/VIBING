@@ -108,13 +108,30 @@ The project uses `@sveltejs/adapter-node` for Node.js deployment, which is suita
    - **Build Command**: `npm install && npm run build`
    - **Start Command**: `npm start`
    - **Environment**: `Node`
+   - **Node Version**: `18` or higher (specify in package.json engines field)
 
-3. **Set Environment Variables** in Render dashboard:
+3. **⚠️ Important: Set Environment Variables BEFORE Building**:
+   
+   **CRITICAL**: Since variables with `VITE_` prefix are embedded at build time, you MUST set these environment variables in Render BEFORE the first build:
+   
    - `VITE_OPENAI_API_KEY`: Your OpenAI API key
    - `VITE_IMGBB_API_KEY`: Your ImgBB API key
    - `VITE_STABILITY_KEY`: Your Stability AI API key
+   
+   **How to set**:
+   - Go to your Render service dashboard
+   - Navigate to "Environment" section
+   - Add all three variables with their values
+   - **Save the changes** (this will trigger a rebuild)
+   
+   **Note**: `PORT` environment variable is automatically provided by Render - you don't need to set it manually.
 
-4. **Deploy**: Render will automatically build and deploy your application
+4. **Deploy**: Render will automatically build and deploy your application. The server will listen on the PORT provided by Render.
+
+**Troubleshooting**:
+- If build fails, check that all three `VITE_*` environment variables are set in Render dashboard
+- If the app doesn't start, check the logs for any missing dependencies
+- Ensure Node.js version is 18 or higher (configured in package.json engines field)
 
 #### Other Deployment Platforms
 
