@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-    import OpenAI from "openai";
 
     let control_image = null;
 
@@ -53,15 +52,27 @@
 
     let globalOptimizedPrompt = "";
 
-    // API keys
-    const GPT_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+    // History collapse state
+    let isHistoryExpanded = false;
+    
+    // Function to handle history item click
+    function handleHistoryItemClick(item: GeneratedImage, index: number, event: Event) {
+        event.stopPropagation(); // Prevent event bubbling
+        const selectedImage = generatedImages[generatedImages.length - index - 1];
+        currentGeneratedImage = selectedImage;
+        promptInputValue = selectedImage.prompt;
+        // Collapse history after selection
+        isHistoryExpanded = false;
+    }
+    
+    // Function to handle overlay click (close history)
+    function handleOverlayClick() {
+        isHistoryExpanded = false;
+    }
 
     let imageFile; // To store the selected file
     let imageUrl = ""; // To store the uploaded image URL
     let imageLoading = false; // To track loading state
-
-    // Your ImgBB API key
-    const imgbbApiKey = import.meta.env.VITE_IMGBB_API_KEY;
 
     // Chatbot states
     let currentImageUrl = '';
@@ -96,62 +107,42 @@
         });
     }
 
-    // Function to fetch image description from OpenAI GPT
+    // Function to fetch image description from OpenAI GPT via server API
     async function fetchImageDescriptionForGeneratedImage(imageUrl: string) {
         try {
-            // Fetch the image blob from the object URL
-            const response = await fetch(imageUrl);
-            if (!response.ok) {
-                throw new Error('Failed to fetch the image blob.');
+            // Check if imageUrl is already a data URL
+            let dataUrl: string;
+            if (imageUrl.startsWith('data:')) {
+                dataUrl = imageUrl;
+            } else {
+                // Fetch the image blob from the object URL
+                const response = await fetch(imageUrl);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch the image blob.');
+                }
+                const blob = await response.blob();
+                // Convert the blob to a base64 data URL
+                dataUrl = await blobToDataURL(blob);
             }
-            const blob = await response.blob();
 
-            // Convert the blob to a base64 data URL
-            const dataUrl = await blobToDataURL(blob);
-
-            // Send the message to OpenAI GPT API
-            const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            // Call our server API instead of directly calling OpenAI
+            const gptResponse = await fetch('/api/openai/describe', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${GPT_API_KEY}` // Ensure GPT_API_KEY is securely handled
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: 'gpt-4o-mini', // Use the correct model
-                    messages: [
-                        { 
-                            role: 'system', 
-                            content: `
-                            You are the assistant to describe the user input image. Please respond the folowing information:
-                            1, A detailed description of the uploaded image. Put it between labels <desciption> and </desciption>.
-                            2, Bullet points about all objects and corresponding descriptions in the image. Keep each bullet point short. Each point contains a different piece of information about the whole image from other points. Put each bullet point between labels <bullet> and </bullet>.
-                            `
-                        },
-                        { 
-                            role: 'user', 
-                            content: [{
-                                type: "image_url",
-                                image_url: {
-                                    url: dataUrl
-                                }
-                            }] 
-                        }
-                    ],
-                    temperature: 0.7, // Adjust as needed
-                    max_tokens: 200, // Adjust as needed
-                    n: 1
-                    // stop: null
+                    imageDataUrl: dataUrl
                 })
             });
 
             if (!gptResponse.ok) {
                 const errorData = await gptResponse.json();
-                throw new Error(errorData.error.message || 'Failed to fetch description from OpenAI');
+                throw new Error(errorData.error || 'Failed to fetch description from OpenAI');
             }
 
             const data = await gptResponse.json();
-            const botResponse = data.choices[0].message.content.trim();
-            return botResponse;
+            return data.description;
             
         } catch (error) {
             // Replace "Analyzing image..." with an error message
@@ -171,75 +162,34 @@
         error = '';
         api_response = null;
         console.log("Initial Prompt: ", promptInputValue);
-        const endpoint = "/generate/sd3"; // default endpoint
 
         try {
-
-            // const { optimizedPrompt, endpoint } = await prepareImageMessage(input_value);
-            // prepare input here:
-            
-
-            const baseURL = "https://api.stability.ai/v2beta/stable-image";
-
-            // Validate and construct the full endpoint URL
-            const validEndpoints = [
-                "/generate/core",
-                "/generate/sd3",
-                "/control/style",
-                "/control/structure",
-                "/control/sketch",
-                "/edit/inpaint",
-                "/edit/outpaint"
-            ];
-
-            if (!validEndpoints.includes(endpoint)) {
-                throw new Error(`Invalid endpoint received: ${endpoint}`);
-            }
-
-            const fullEndpoint = `${baseURL}${endpoint}`;
-
-            // Prepare form data
+            // Prepare form data for our server API
             const formData = new FormData();
             formData.append("prompt", promptInputValue.trim());
-            formData.append("height", '1024'); // Default height for style endpoint
-            formData.append("width", '1024');  // Default width for style endpoint
+            formData.append("height", '1024');
+            formData.append("width", '1024');
+            formData.append("useControlImage", useControlImage.toString());
 
-            if (control_image && useControlImage) { 
-                // TODO: figure out the control image
-                formData.append("mode", "image-to-image");
-                formData.append("image", control_image);
-                formData.append("model", "sd3.5-large-turbo"); // choose model
-                // Optionally, add other parameters like fidelity, aspect_ratio, etc.
-                // formData.append("fidelity", '0.5'); // Example fidelity
-                // formData.append("aspect_ratio", '1:1'); // Example aspect ratio
-                formData.append("output_format", 'png'); // Example output format
-                formData.append("strength", '0.7'); 
-            } else {
-                // If using the core endpoint, you might have different or additional parameters
-                formData.append("negative_prompt", ""); // Example of adding a negative prompt
-                formData.append("model", "sd3.5-large-turbo"); // choose model
+            if (control_image && useControlImage) {
+                formData.append("controlImage", control_image);
             }
 
-            const response = await fetch(fullEndpoint, {
+            // Call our server API instead of directly calling Stability AI
+            const response = await fetch('/api/stability/generate', {
                 method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${import.meta.env.VITE_STABILITY_KEY}`, // Stability API Key
-                    "Accept": "image/*"
-                },
                 body: formData
             });
 
             if (!response.ok) {
-                // Attempt to parse and log the error response for debugging
-                const errorText = await response.text();
-                console.error("API Error Response:", errorText);
-
-                throw new Error(`Failed to fetch image from Stability AI: ${errorText}`);
+                const errorData = await response.json();
+                console.error("API Error Response:", errorData);
+                throw new Error(errorData.error || 'Failed to fetch image from Stability AI');
             }
 
-            // Convert the binary image response to an object URL
-            const blob = await response.blob();
-            const imageUrl = URL.createObjectURL(blob);
+            const data = await response.json();
+            // Convert base64 data URL to blob URL
+            const imageUrl = data.imageDataUrl;
 
             // Determine the category based on whether a control image was used
             let category: 'generated' | 'refined' = control_image ? 'refined' : 'generated';
@@ -435,16 +385,28 @@
             }, 100);
 
         try {
-            const openai = new OpenAI({apiKey: GPT_API_KEY, dangerouslyAllowBrowser: true });
-            const completion = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: chatMessagesBackend,
+            // Call our server API instead of directly calling OpenAI
+            const response = await fetch('/api/openai/completion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: chatMessagesBackend
+                })
             });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to get completion from OpenAI');
+            }
+
+            const data = await response.json();
 
             // Remove the "Typing..." message
             chatMessagesChat.pop();
             
-            const botResponse = completion.choices[0].message.content;
+            const botResponse = data.content;
             chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: botResponse }];
             chatMessagesBackend = [...chatMessagesBackend, { role: "assistant", content: botResponse }];
 
@@ -480,11 +442,11 @@
       imageLoading = true;
   
       try {
+        // Call our server API instead of directly calling ImgBB
         const formData = new FormData();
-        formData.append("key", imgbbApiKey); // Add API key to formData
-        formData.append("image", imageFile); // Add image file to formData
+        formData.append("image", imageFile);
   
-        const response = await fetch("https://api.imgbb.com/1/upload", {
+        const response = await fetch("/api/imgbb/upload", {
           method: "POST",
           body: formData,
         });
@@ -492,9 +454,9 @@
         const data = await response.json();
   
         if (response.ok) {
-          imageUrl = data.data.url; // ImgBB provides the URL in `data.url`
+          imageUrl = data.url; // ImgBB provides the URL
         } else {
-          throw new Error(data.error.message || "Failed to upload image");
+          throw new Error(data.error || "Failed to upload image");
         }
 
         chatMessagesBackend = [...chatMessagesBackend, 
@@ -517,16 +479,28 @@
             }, 100);
 
         try {
-            const openai = new OpenAI({apiKey: GPT_API_KEY, dangerouslyAllowBrowser: true });
-            const completion = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: chatMessagesBackend,
+            // Call our server API instead of directly calling OpenAI
+            const completionResponse = await fetch('/api/openai/completion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: chatMessagesBackend
+                })
             });
+
+            if (!completionResponse.ok) {
+                const errorData = await completionResponse.json();
+                throw new Error(errorData.error || 'Failed to get completion from OpenAI');
+            }
+
+            const completionData = await completionResponse.json();
 
             // Remove the "Typing..." message
             chatMessagesChat.pop();
             
-            const botResponse = completion.choices[0].message.content;
+            const botResponse = completionData.content;
             chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: botResponse }];
             chatMessagesBackend = [...chatMessagesBackend, { role: "assistant", content: botResponse }];
 
@@ -551,7 +525,7 @@
             }, 100); 
         }
       } catch (error) {
-        alert(`Error: ${error.message}`);
+        alert(`Error: ${error instanceof Error ? error.message : 'An unknown error occurred'}`);
       } finally {
         imageLoading = false;
       }
@@ -742,6 +716,16 @@
         padding: 0;
         min-height: 100vh;
         line-height: var(--line-height);
+        box-sizing: border-box;
+        overflow-x: hidden;
+    }
+
+    :global(body) {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        overflow-x: hidden;
+        width: 100%;
     }
 
 
@@ -755,6 +739,7 @@
         flex-wrap: wrap;
         max-width: 1400px;
         margin: 0 auto;
+        box-sizing: border-box;
     }
 
     /* Shared Box Styling */
@@ -769,6 +754,7 @@
         min-width: 250px;
         height: fit-content;
         transition: all 0.3s ease;
+        box-sizing: border-box;
     }
 
     .box:hover {
@@ -1082,6 +1068,99 @@
         border-color: var(--error-color);
     }
 
+    /* History Overlay (for desktop) */
+    .history-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9998;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+
+    .history-overlay.active {
+        display: block;
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* Hide overlay on mobile */
+    @media (max-width: 1000px) {
+        .history-overlay {
+            display: none !important;
+        }
+    }
+
+    /* History Toggle Button (for desktop) */
+    .history-toggle-button-desktop {
+        display: none; /* Hidden by default, shown on desktop */
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 10;
+        padding: 10px 14px;
+        background-color: var(--button-bg-color);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        box-shadow: var(--shadow-md);
+        transition: all 0.2s ease;
+        pointer-events: auto;
+    }
+
+    .history-toggle-button-desktop:hover {
+        background-color: var(--button-hover-color);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    /* Container needs relative positioning for absolute button */
+    .container {
+        position: relative;
+    }
+
+    @media (min-width: 1001px) {
+        .history-toggle-button-desktop {
+            display: block;
+        }
+
+        /* Overlay should only be visible when active */
+        .history-overlay.active {
+            display: block;
+        }
+
+        /* History panel should be above overlay */
+        .history.expanded {
+            z-index: 9999 !important;
+        }
+
+        /* When history is expanded, disable pointer events on main content */
+        .parent-container.history-overlay-active,
+        .parent-container.history-overlay-active * {
+            pointer-events: none !important;
+        }
+
+        /* But allow history panel and its contents to be clickable */
+        .history.expanded,
+        .history.expanded * {
+            pointer-events: auto !important;
+        }
+
+        /* When history is expanded, history button should be behind overlay */
+        .parent-container.history-overlay-active .history-toggle-button-desktop {
+            z-index: 1 !important;
+            pointer-events: none !important;
+        }
+    }
+
     /* History Styling */
     .history {
         margin-top: 40px;
@@ -1091,6 +1170,158 @@
         overflow-y: auto;
         overflow-x: hidden;
         padding-right: 8px;
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Desktop: History as side panel */
+    @media (min-width: 1001px) {
+        .history {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 40%;
+            max-width: 600px;
+            height: 100vh;
+            margin-top: 0;
+            min-width: 0;
+            background-color: var(--bg-secondary);
+            z-index: 9999;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            box-shadow: var(--shadow-lg);
+            padding: 24px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .history.expanded {
+            transform: translateX(0);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .history-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            flex: 1;
+        }
+
+        .history-close-button {
+            display: block !important;
+            padding: 10px 16px;
+            background-color: var(--button-bg-color);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            margin-left: 12px;
+            min-width: 80px;
+        }
+
+        .history-close-button:hover {
+            background-color: var(--button-hover-color);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .history-content {
+            display: block;
+        }
+
+        /* Desktop: History items should be horizontal (image left, text right) */
+        .history-item {
+            flex-direction: row !important;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .history-item img {
+            width: 150px;
+            min-width: 150px;
+            max-width: 150px;
+            height: 150px;
+            object-fit: contain; /* Show full image without cropping */
+            flex-shrink: 0;
+            border-radius: 8px;
+            background-color: var(--bg-color); /* Background for transparent images */
+            border: 1px solid var(--border-color);
+        }
+
+        .prompt-section {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            /* Ensure text has enough space */
+        }
+
+        .prompt-section .prompt {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            /* Show full prompt on desktop, no truncation */
+        }
+
+        /* Override truncation on desktop - show full prompt */
+        .prompt-section .prompt-truncated {
+            display: block !important;
+            -webkit-line-clamp: none !important;
+            line-clamp: none !important;
+            -webkit-box-orient: horizontal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+        }
+
+        .prompt-section .timestamp {
+            font-size: 0.75rem;
+            margin-top: 8px;
+            display: block; /* Show timestamp on desktop */
+        }
+    }
+
+    .history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .history-header h3 {
+        margin: 0;
+    }
+
+    .history-toggle-button {
+        display: none; /* Hidden on desktop, shown on mobile */
+        padding: 6px 12px;
+        font-size: 0.875rem;
+        background-color: var(--button-bg-color);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .history-toggle-button:hover {
+        background-color: var(--button-hover-color);
+    }
+
+    .history-close-button {
+        display: none; /* Hidden by default, shown in desktop when expanded */
+    }
+
+    .history-content {
+        display: block; /* Always visible on desktop when expanded */
     }
 
     /* Custom scrollbar styling for history */
@@ -1168,6 +1399,9 @@
         line-height: var(--line-height);
     }
 
+    /* Desktop: show full prompt, no truncation (default behavior) */
+    /* Mobile: truncate prompt - defined in media query */
+
     .type-and-download {
         display: flex;
         align-items: center;
@@ -1189,18 +1423,188 @@
     @media (max-width: 1000px) {
         .parent-container {
             flex-direction: column;
-            align-items: center;
+            align-items: stretch;
+            padding: 12px;
+            gap: 12px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .box {
+            min-width: 0;
+            max-width: 100%;
+            flex: 1 1 auto;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 20px;
         }
 
         .container, .chatbot-pane {
             max-width: 100%;
+            min-width: 0;
+            flex: 1 1 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Hide desktop history button on mobile */
+        .history-toggle-button-desktop {
+            display: none !important;
+        }
+
+        /* History in mobile: collapsible menu - match .box style */
+        .history {
+            position: relative !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important; /* Use parent gap instead */
+            max-height: none !important;
+            height: auto !important;
+            transform: none !important;
+            order: -1; /* Move to top */
+            /* Match .box styling */
+            background-color: var(--bg-secondary);
+            padding: 12px 20px; /* Reduced vertical padding when collapsed */
+            border-radius: 16px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+            transition: all 0.3s ease; /* Match .box transition */
+        }
+
+        /* When expanded, use full padding */
+        .history.expanded {
+            padding: 20px;
+        }
+
+        /* Match .box hover effect */
+        .history:hover {
+            box-shadow: var(--shadow-lg);
+            border-color: var(--input-focus-border);
+        }
+
+        .history-header {
+            display: flex; /* Show header in mobile */
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0; /* Remove margin when collapsed */
+            padding: 0; /* Remove padding - history container already has padding */
+            background-color: transparent; /* No background - part of history container */
+            border-radius: 0;
+            border: none;
+            box-shadow: none;
+        }
+
+        /* When expanded, add margin-bottom for spacing */
+        .history.expanded .history-header {
+            margin-bottom: 16px;
+        }
+
+        .history-header h3 {
+            margin: 0;
+            font-size: 1.2rem; /* Match h1 size in other modules */
+            flex: 1;
+            padding: 0;
+            font-weight: 600;
+        }
+
+        .history-toggle-button {
+            display: block; /* Show button in mobile */
+            margin: 0;
+            padding: 6px 12px;
+            background-color: var(--button-bg-color);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+        }
+
+        .history-toggle-button:hover {
+            background-color: var(--button-hover-color);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .history-content {
+            display: none; /* Hidden by default in mobile */
+        }
+
+        .history-content.expanded {
+            display: block; /* Show when expanded */
+            max-height: 380px; /* Limit to approximately 3 history items */
+            overflow-y: auto; /* Enable scrolling when content exceeds */
+            overflow-x: hidden;
+            padding: 0; /* No padding - history container already has padding */
+            margin-top: 0;
+        }
+
+        .history-item {
+            flex-direction: row;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            margin-right: 0; /* Remove right margin - container has padding */
+            padding: 12px;
+        }
+
+        .history-item img {
+            width: 80px;
+            min-width: 80px;
+            height: 80px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .prompt-section {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .prompt-section .prompt {
+            font-size: 0.875rem;
+            flex: 1;
+        }
+
+        .prompt-section .prompt-truncated {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .prompt-section .timestamp {
+            display: none; /* Hide timestamp in mobile to save space */
         }
     }
 
     @media (max-width: 600px) {
-        .container {
-            margin: 20px;
-            padding: 15px;
+        .parent-container {
+            padding: 8px;
+            gap: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .box {
+            padding: 16px;
+        }
+
+        /* Match history padding with .box in smaller screens */
+        .history {
+            padding: 16px !important;
+        }
+
+        .container, .chatbot-pane {
+            padding: 16px;
+            margin: 0;
+            box-sizing: border-box;
         }
 
         button, input[type="text"], input[type="file"], .brush-controls input[type="range"] {
@@ -1209,7 +1613,13 @@
         }
 
         .history-item img {
-            width: 100%;
+            width: 70px;
+            min-width: 70px;
+            height: 70px;
+        }
+
+        .prompt-section .prompt {
+            font-size: 0.8rem;
         }
 
         .brush-controls {
@@ -1257,31 +1667,63 @@
 
 </style>
 
-<div class="parent-container">
+<!-- History Overlay (Desktop) -->
+<div 
+    class="history-overlay" 
+    class:active={isHistoryExpanded}
+    on:click={handleOverlayClick}
+    role="button"
+    tabindex="0"
+    on:keydown={(e) => { if (e.key === 'Escape') isHistoryExpanded = false; }}
+></div>
+
+<div class="parent-container" class:history-overlay-active={isHistoryExpanded}>
     <!-- History of generated and modified images -->
     <!--{#if generatedImages.length > 1}-->
-        <div class="history">
-            <h3>History</h3>
-            {#each generatedImages.reverse() as item, index}
-                <div class="history-item" on:click={() => {
-                    const selectedImage = generatedImages[generatedImages.length - index - 1];
-                    currentGeneratedImage = selectedImage;
-                    promptInputValue = selectedImage.prompt;
-                }}>
-                    <img src={item.imageUrl} alt={"Image " + (index + 1)} />
-                    <div class="prompt-section">
-                        <p class="prompt">Prompt: {item.prompt}</p>
-                        <div class="type-and-download">
+        <div class="history" class:expanded={isHistoryExpanded}>
+            <div class="history-header">
+                <h3>History</h3>
+                <button 
+                    class="history-toggle-button"
+                    on:click={() => isHistoryExpanded = !isHistoryExpanded}
+                    aria-label={isHistoryExpanded ? "Collapse history" : "Expand history"}
+                >
+                    {isHistoryExpanded ? '▼' : '▶'}
+                </button>
+                <button 
+                    class="history-close-button"
+                    on:click={() => isHistoryExpanded = false}
+                    aria-label="Close history"
+                >
+                    Close
+                </button>
+            </div>
+            <div class="history-content" class:expanded={isHistoryExpanded}>
+                {#each generatedImages.reverse() as item, index}
+                    <div class="history-item" on:click={(e) => handleHistoryItemClick(item, index, e)}>
+                        <img src={item.imageUrl} alt={"Image " + (index + 1)} />
+                        <div class="prompt-section">
+                            <p class="prompt prompt-truncated">Prompt: {item.prompt}</p>
+                            <div class="type-and-download">
+                            </div>
+                            <p class="timestamp">Time: {new Date(item.timestamp).toLocaleString()}</p>
                         </div>
-                        <p class="timestamp">Time: {new Date(item.timestamp).toLocaleString()}</p>
                     </div>
-                </div>
-            {/each}
+                {/each}
+            </div>
         </div>
     <!--{/if}-->
 
     <!-- Existing Image Interaction Container -->
     <div class="container box">
+        <!-- History Toggle Button (Desktop) - Inside Generate Image container -->
+        <button 
+            class="history-toggle-button-desktop"
+            on:click={() => isHistoryExpanded = !isHistoryExpanded}
+            aria-label={isHistoryExpanded ? "Close history" : "Open history"}
+        >
+            {isHistoryExpanded ? '✕' : '☰'} History
+        </button>
         <h1>Generate Image</h1>
 
         <div class="input-group">

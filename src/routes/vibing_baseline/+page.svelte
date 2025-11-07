@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-    import OpenAI from "openai";
 
     let control_image = null;
 
@@ -53,15 +52,9 @@
 
     let globalOptimizedPrompt = "";
 
-    // API keys
-    const GPT_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-
     let imageFile; // To store the selected file
     let imageUrl = ""; // To store the uploaded image URL
     let imageLoading = false; // To track loading state
-
-    // Your ImgBB API key
-    const imgbbApiKey = import.meta.env.VITE_IMGBB_API_KEY;
 
     // Chatbot states
     let currentImageUrl = '';
@@ -96,62 +89,42 @@
         });
     }
 
-    // Function to fetch image description from OpenAI GPT
+    // Function to fetch image description from OpenAI GPT via server API
     async function fetchImageDescriptionForGeneratedImage(imageUrl: string) {
         try {
-            // Fetch the image blob from the object URL
-            const response = await fetch(imageUrl);
-            if (!response.ok) {
-                throw new Error('Failed to fetch the image blob.');
+            // Check if imageUrl is already a data URL
+            let dataUrl: string;
+            if (imageUrl.startsWith('data:')) {
+                dataUrl = imageUrl;
+            } else {
+                // Fetch the image blob from the object URL
+                const response = await fetch(imageUrl);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch the image blob.');
+                }
+                const blob = await response.blob();
+                // Convert the blob to a base64 data URL
+                dataUrl = await blobToDataURL(blob);
             }
-            const blob = await response.blob();
 
-            // Convert the blob to a base64 data URL
-            const dataUrl = await blobToDataURL(blob);
-
-            // Send the message to OpenAI GPT API
-            const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            // Call our server API instead of directly calling OpenAI
+            const gptResponse = await fetch('/api/openai/describe', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${GPT_API_KEY}` // Ensure GPT_API_KEY is securely handled
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: 'gpt-4o-mini', // Use the correct model
-                    messages: [
-                        { 
-                            role: 'system', 
-                            content: `
-                            You are the assistant to describe the user input image. Please respond the folowing information:
-                            1, A detailed description of the uploaded image. Put it between labels <desciption> and </desciption>.
-                            2, Bullet points about all objects and corresponding descriptions in the image. Keep each bullet point short. Each point contains a different piece of information about the whole image from other points. Put each bullet point between labels <bullet> and </bullet>.
-                            `
-                        },
-                        { 
-                            role: 'user', 
-                            content: [{
-                                type: "image_url",
-                                image_url: {
-                                    url: dataUrl
-                                }
-                            }] 
-                        }
-                    ],
-                    temperature: 0.7, // Adjust as needed
-                    max_tokens: 200, // Adjust as needed
-                    n: 1
-                    // stop: null
+                    imageDataUrl: dataUrl
                 })
             });
 
             if (!gptResponse.ok) {
                 const errorData = await gptResponse.json();
-                throw new Error(errorData.error.message || 'Failed to fetch description from OpenAI');
+                throw new Error(errorData.error || 'Failed to fetch description from OpenAI');
             }
 
             const data = await gptResponse.json();
-            const botResponse = data.choices[0].message.content.trim();
-            return botResponse;
+            return data.description;
             
         } catch (error) {
             // Replace "Analyzing image..." with an error message
@@ -171,75 +144,34 @@
         error = '';
         api_response = null;
         console.log("Initial Prompt: ", promptInputValue);
-        const endpoint = "/generate/sd3"; // default endpoint
 
         try {
-
-            // const { optimizedPrompt, endpoint } = await prepareImageMessage(input_value);
-            // prepare input here:
-            
-
-            const baseURL = "https://api.stability.ai/v2beta/stable-image";
-
-            // Validate and construct the full endpoint URL
-            const validEndpoints = [
-                "/generate/core",
-                "/generate/sd3",
-                "/control/style",
-                "/control/structure",
-                "/control/sketch",
-                "/edit/inpaint",
-                "/edit/outpaint"
-            ];
-
-            if (!validEndpoints.includes(endpoint)) {
-                throw new Error(`Invalid endpoint received: ${endpoint}`);
-            }
-
-            const fullEndpoint = `${baseURL}${endpoint}`;
-
-            // Prepare form data
+            // Prepare form data for our server API
             const formData = new FormData();
             formData.append("prompt", promptInputValue.trim());
-            formData.append("height", '1024'); // Default height for style endpoint
-            formData.append("width", '1024');  // Default width for style endpoint
+            formData.append("height", '1024');
+            formData.append("width", '1024');
+            formData.append("useControlImage", useControlImage.toString());
 
-            if (control_image && useControlImage) { 
-                // TODO: figure out the control image
-                formData.append("mode", "image-to-image");
-                formData.append("image", control_image);
-                formData.append("model", "sd3.5-large-turbo"); // choose model
-                // Optionally, add other parameters like fidelity, aspect_ratio, etc.
-                // formData.append("fidelity", '0.5'); // Example fidelity
-                // formData.append("aspect_ratio", '1:1'); // Example aspect ratio
-                formData.append("output_format", 'png'); // Example output format
-                formData.append("strength", '0.7'); 
-            } else {
-                // If using the core endpoint, you might have different or additional parameters
-                formData.append("negative_prompt", ""); // Example of adding a negative prompt
-                formData.append("model", "sd3.5-large-turbo"); // choose model
+            if (control_image && useControlImage) {
+                formData.append("controlImage", control_image);
             }
 
-            const response = await fetch(fullEndpoint, {
+            // Call our server API instead of directly calling Stability AI
+            const response = await fetch('/api/stability/generate', {
                 method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${import.meta.env.VITE_STABILITY_KEY}`, // Stability API Key
-                    "Accept": "image/*"
-                },
                 body: formData
             });
 
             if (!response.ok) {
-                // Attempt to parse and log the error response for debugging
-                const errorText = await response.text();
-                console.error("API Error Response:", errorText);
-
-                throw new Error(`Failed to fetch image from Stability AI: ${errorText}`);
+                const errorData = await response.json();
+                console.error("API Error Response:", errorData);
+                throw new Error(errorData.error || 'Failed to fetch image from Stability AI');
             }
 
-            // Convert the binary image response to an object URL
-            const blob = await response.blob();
-            const imageUrl = URL.createObjectURL(blob);
+            const data = await response.json();
+            // Convert base64 data URL to blob URL
+            const imageUrl = data.imageDataUrl;
 
             // Determine the category based on whether a control image was used
             let category: 'generated' | 'refined' = control_image ? 'refined' : 'generated';
@@ -434,16 +366,28 @@
             }, 100);
 
         try {
-            const openai = new OpenAI({apiKey: GPT_API_KEY, dangerouslyAllowBrowser: true });
-            const completion = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: chatMessagesBackend,
+            // Call our server API instead of directly calling OpenAI
+            const response = await fetch('/api/openai/completion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: chatMessagesBackend
+                })
             });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to get completion from OpenAI');
+            }
+
+            const data = await response.json();
 
             // Remove the "Typing..." message
             chatMessagesChat.pop();
             
-            const botResponse = completion.choices[0].message.content;
+            const botResponse = data.content;
             chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: botResponse }];
             chatMessagesBackend = [...chatMessagesBackend, { role: "assistant", content: botResponse }];
 
@@ -479,11 +423,11 @@
       imageLoading = true;
   
       try {
+        // Call our server API instead of directly calling ImgBB
         const formData = new FormData();
-        formData.append("key", imgbbApiKey); // Add API key to formData
-        formData.append("image", imageFile); // Add image file to formData
+        formData.append("image", imageFile);
   
-        const response = await fetch("https://api.imgbb.com/1/upload", {
+        const response = await fetch("/api/imgbb/upload", {
           method: "POST",
           body: formData,
         });
@@ -491,9 +435,9 @@
         const data = await response.json();
   
         if (response.ok) {
-          imageUrl = data.data.url; // ImgBB provides the URL in `data.url`
+          imageUrl = data.url; // ImgBB provides the URL
         } else {
-          throw new Error(data.error.message || "Failed to upload image");
+          throw new Error(data.error || "Failed to upload image");
         }
 
         chatMessagesBackend = [...chatMessagesBackend, 
@@ -516,16 +460,28 @@
             }, 100);
 
         try {
-            const openai = new OpenAI({apiKey: GPT_API_KEY, dangerouslyAllowBrowser: true });
-            const completion = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: chatMessagesBackend,
+            // Call our server API instead of directly calling OpenAI
+            const completionResponse = await fetch('/api/openai/completion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: chatMessagesBackend
+                })
             });
+
+            if (!completionResponse.ok) {
+                const errorData = await completionResponse.json();
+                throw new Error(errorData.error || 'Failed to get completion from OpenAI');
+            }
+
+            const completionData = await completionResponse.json();
 
             // Remove the "Typing..." message
             chatMessagesChat.pop();
             
-            const botResponse = completion.choices[0].message.content;
+            const botResponse = completionData.content;
             chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: botResponse }];
             chatMessagesBackend = [...chatMessagesBackend, { role: "assistant", content: botResponse }];
 
@@ -550,7 +506,7 @@
             }, 100); 
         }
       } catch (error) {
-        alert(`Error: ${error.message}`);
+        alert(`Error: ${error instanceof Error ? error.message : 'An unknown error occurred'}`);
       } finally {
         imageLoading = false;
       }

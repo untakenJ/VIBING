@@ -1,6 +1,6 @@
 # VIBING
 
-This is the code repository for the CS 2790R project `VIBING: Visual INtuition-Based Interaction for Natural Generation from Painters & Srtists` at Harvard University.
+This is the code repository for the CS 2790R project `VIBING: Visual INtuition-Based Interaction for Natural Generation from Painters & Artists` at Harvard University.
 
 This project is powered by [`Svelte`](https://github.com/sveltejs/svelte).
 
@@ -30,15 +30,19 @@ npm install
 
 Before running the application, you need to configure the required API keys.
 
+**⚠️ IMPORTANT SECURITY NOTE:** All API keys are now stored as **server-side environment variables** (without the `VITE_` prefix). This ensures they are never exposed to the client and remain secure. The application uses server-side API routes to proxy all third-party API calls.
+
 1. Copy the example environment file:
    ```bash
    cp env.example .env.local
    ```
 
 2. Edit `.env.local` and fill in your actual API keys:
-   - `VITE_OPENAI_API_KEY`: Your OpenAI API key (for GPT-4o-mini, used for image description and chat assistant)
-   - `VITE_IMGBB_API_KEY`: Your ImgBB API key (for image upload)
-   - `VITE_STABILITY_KEY`: Your Stability AI API key (for image generation)
+   - `OPENAI_API_KEY`: Your OpenAI API key (for GPT-4o-mini, used for image description and chat assistant)
+   - `IMGBB_API_KEY`: Your ImgBB API key (for image upload)
+   - `STABILITY_KEY`: Your Stability AI API key (for image generation)
+
+   **Note:** These variables do NOT have the `VITE_` prefix, which means they are only accessible on the server side and will never be exposed to the client.
 
    You can obtain these API keys from:
    - OpenAI: https://platform.openai.com/api-keys
@@ -70,13 +74,16 @@ Before building for production, ensure you have configured the environment varia
    ```
    
    Edit `.env.production` and fill in your actual API keys (same as development):
-   - `VITE_OPENAI_API_KEY`: Your OpenAI API key
-   - `VITE_IMGBB_API_KEY`: Your ImgBB API key
-   - `VITE_STABILITY_KEY`: Your Stability AI API key
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `IMGBB_API_KEY`: Your ImgBB API key
+   - `STABILITY_KEY`: Your Stability AI API key
 
-2. **For deployment platforms** (Vercel, Netlify, etc.):
+   **Note:** These are server-side environment variables (no `VITE_` prefix) and will not be exposed to the client.
+
+2. **For deployment platforms** (Vercel, Netlify, Render, etc.):
    - Configure the environment variables in your platform's dashboard/settings
-   - The same three variables are required: `VITE_OPENAI_API_KEY`, `VITE_IMGBB_API_KEY`, `VITE_STABILITY_KEY`
+   - The same three variables are required: `OPENAI_API_KEY`, `IMGBB_API_KEY`, `STABILITY_KEY`
+   - **Important:** Do NOT use `VITE_` prefix - these are server-side only variables
 
 ### Build Commands
 
@@ -110,26 +117,29 @@ The project uses `@sveltejs/adapter-node` for Node.js deployment, which is suita
    - **Environment**: `Node`
    - **Node Version**: `18` or higher (specify in package.json engines field)
 
-3. **⚠️ Important: Set Environment Variables BEFORE Building**:
+3. **⚠️ Important: Set Environment Variables**:
    
-   **CRITICAL**: Since variables with `VITE_` prefix are embedded at build time, you MUST set these environment variables in Render BEFORE the first build:
+   **CRITICAL**: Set these server-side environment variables in Render (they do NOT have the `VITE_` prefix):
    
-   - `VITE_OPENAI_API_KEY`: Your OpenAI API key
-   - `VITE_IMGBB_API_KEY`: Your ImgBB API key
-   - `VITE_STABILITY_KEY`: Your Stability AI API key
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `IMGBB_API_KEY`: Your ImgBB API key
+   - `STABILITY_KEY`: Your Stability AI API key
    
    **How to set**:
    - Go to your Render service dashboard
    - Navigate to "Environment" section
-   - Add all three variables with their values
+   - Add all three variables with their values (without `VITE_` prefix)
    - **Save the changes** (this will trigger a rebuild)
    
-   **Note**: `PORT` environment variable is automatically provided by Render - you don't need to set it manually.
+   **Note**: 
+   - `PORT` environment variable is automatically provided by Render - you don't need to set it manually.
+   - These are server-side variables and will never be exposed to the client, ensuring your API keys remain secure.
 
 4. **Deploy**: Render will automatically build and deploy your application. The server will listen on the PORT provided by Render.
 
 **Troubleshooting**:
-- If build fails, check that all three `VITE_*` environment variables are set in Render dashboard
+- If build fails, check that all three environment variables (`OPENAI_API_KEY`, `IMGBB_API_KEY`, `STABILITY_KEY`) are set in Render dashboard
+- **Important:** Do NOT use `VITE_` prefix - these are server-side only variables
 - If the app doesn't start, check the logs for any missing dependencies
 - Ensure Node.js version is 18 or higher (configured in package.json engines field)
 
@@ -139,10 +149,12 @@ The project uses `@sveltejs/adapter-node` for Node.js deployment, which is suita
 - **Node.js servers**: Current setup with `adapter-node` is ready
 - **Static hosting**: Would require switching to `@sveltejs/adapter-static`
 
-**Important**: When deploying to production, make sure to set the environment variables in your hosting platform's environment settings. The required variables are:
-- `VITE_OPENAI_API_KEY`
-- `VITE_IMGBB_API_KEY`
-- `VITE_STABILITY_KEY`
+**Important**: When deploying to production, make sure to set the environment variables in your hosting platform's environment settings. The required variables are (without `VITE_` prefix):
+- `OPENAI_API_KEY`
+- `IMGBB_API_KEY`
+- `STABILITY_KEY`
+
+These are server-side environment variables that will never be exposed to the client, ensuring your API keys remain secure.
 
 > For more information about adapters, see [SvelteKit adapters documentation](https://svelte.dev/docs/kit/adapters).
 
