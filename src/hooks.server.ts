@@ -7,6 +7,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     return new Response(null, { status: 404 });
   }
 
-  return resolve(event);
+  // Increase body size limit for file uploads (32MB to match ImgBB limit)
+  // Default is 512KB, which is too small for image uploads
+  return resolve(event, {
+    bodySizeLimit: 32 * 1024 * 1024 // 32MB
+  });
 };
 
