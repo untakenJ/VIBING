@@ -47,9 +47,23 @@ export const POST = (async ({ request }) => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorText: string;
+      try {
+        errorText = await response.text();
+        // Try to parse as JSON for better error message
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorText = errorJson.message || errorJson.error || errorText;
+        } catch {
+          // Not JSON, use as is
+        }
+      } catch {
+        errorText = `HTTP ${response.status} ${response.statusText}`;
+      }
+      
+      console.error('[Stability Generate] API error:', response.status, errorText);
       return new Response(JSON.stringify({ 
-        error: `Failed to fetch image from Stability AI: ${errorText}` 
+        error: `Failed to generate image: ${errorText}` 
       }), {
         status: response.status,
         headers: { 'Content-Type': 'application/json' }

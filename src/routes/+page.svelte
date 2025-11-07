@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
+    import { base } from '$app/paths';
 
     let control_image: File | null = null;
 
@@ -127,7 +128,7 @@
             }
 
             // Call our server API instead of directly calling OpenAI
-            const gptResponse = await fetch('/api/openai/describe', {
+            const gptResponse = await fetch(`${base}/api/openai/describe`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -177,15 +178,24 @@
             }
 
             // Call our server API instead of directly calling Stability AI
-            const response = await fetch('/api/stability/generate', {
+            const response = await fetch(`${base}/api/stability/generate`, {
                 method: "POST",
                 body: formData
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
+                let errorData: any;
+                try {
+                    errorData = await response.json();
+                } catch {
+                    // If response is not JSON, create error from status
+                    throw new Error(`Failed to generate image: ${response.status} ${response.statusText}`);
+                }
                 console.error("API Error Response:", errorData);
-                throw new Error(errorData.error || 'Failed to fetch image from Stability AI');
+                const errorMessage = errorData.error || 'Failed to fetch image from Stability AI';
+                // Ensure error message doesn't contain URLs
+                const cleanErrorMessage = errorMessage.replace(/@?https?:\/\/[^\s]+/g, '').trim();
+                throw new Error(cleanErrorMessage || 'Failed to generate image');
             }
 
             const data = await response.json();
@@ -387,7 +397,7 @@
 
         try {
             // Call our server API instead of directly calling OpenAI
-            const response = await fetch('/api/openai/completion', {
+            const response = await fetch(`${base}/api/openai/completion`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -447,7 +457,7 @@
         const formData = new FormData();
         formData.append("image", imageFile);
   
-        const response = await fetch("/api/imgbb/upload", {
+        const response = await fetch(`${base}/api/imgbb/upload`, {
           method: "POST",
           body: formData,
         });
