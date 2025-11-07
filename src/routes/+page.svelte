@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
 
-    let control_image = null;
+    let control_image: File | null = null;
 
     // User input and API response states
     let chatbotInputValue = '';
@@ -70,7 +70,7 @@
         isHistoryExpanded = false;
     }
 
-    let imageFile; // To store the selected file
+    let imageFile: File | null = null; // To store the selected file
     let imageUrl = ""; // To store the uploaded image URL
     let imageLoading = false; // To track loading state
 
@@ -79,8 +79,9 @@
     let chatInput = '';
     let isChatLoading = false;
     let chatError = '';
-    let chatMessagesChat: { role: string; content: object }[] = [];
-    let chatMessagesBackend: { role: string; content: string }[] = [
+    type ChatMessage = { role: string; content: string | object | Array<{ type: string; image_url: { url: string } }> };
+    let chatMessagesChat: ChatMessage[] = [];
+    let chatMessagesBackend: ChatMessage[] = [
         { 
             role: "system",
             content: `
@@ -152,7 +153,7 @@
     }
 
     // Fetch image from Stability API based on user prompt and optional control image
-    async function callStability(useControlImage:boolean=false) {
+    async function callStability(useControlImage: boolean = false): Promise<void> {
         if (!promptInputValue.trim()) {
             alert("Please enter a prompt.");
             return;
@@ -367,8 +368,8 @@
         if (chatInput.trim() === '') return;
 
         // Add user message to chat
-        chatMessagesChat = [...chatMessagesChat, { role: "user", content: chatInput }];
-        chatMessagesBackend = [...chatMessagesBackend, { role: "user", content: chatInput }];
+        chatMessagesChat = [...chatMessagesChat, { role: "user", content: chatInput as string }];
+        chatMessagesBackend = [...chatMessagesBackend, { role: "user", content: chatInput as string }];
 
         // Store the current input and clear it
         const userMessage = chatInput;
@@ -377,7 +378,7 @@
         isChatLoading = true;
 
         // Add a temporary "Typing..." message
-        chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: "Typing..." }];
+        chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: "Typing..." as string }];
         setTimeout(() => {
             if (chatContainer) {
                     chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -465,13 +466,13 @@
             content: [{
                 type: "image_url",
                 image_url: {url: imageUrl},
-            }]
+            }] as Array<{ type: string; image_url: { url: string } }>
         }];
 
         // instantly generate a description from chatgpt
         const chatContainer = document.querySelector('.chat-messages');
         const chatInputBox = document.getElementById('chat-input-box');
-        chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: "Typing..." }];
+        chatMessagesChat = [...chatMessagesChat, { role: "assistant", content: "Typing..." as string }];
         setTimeout(() => {
             if (chatContainer) {
                     chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -531,8 +532,9 @@
       }
     }
   
-    function handleFileChange(event) {
-        imageFile = event.target.files[0];
+    function handleFileChange(event: Event) {
+        const target = event.target as HTMLInputElement;
+        imageFile = target.files?.[0] || null;
     }
 
     function extractTextBetweenTags(inputText: string, tagName: string): string[] {
@@ -636,6 +638,9 @@
         */
 
         // Get the last generated or refined image
+        if (!currentGeneratedImage) {
+            return;
+        }
         const lastImageEntry = currentGeneratedImage;
         const lastImageUrl = currentGeneratedImage.imageUrl;
 
@@ -883,7 +888,7 @@
     }
 
     /* Input and Button Styling */
-    .input-group, .feedback-section, .chat-input {
+    .input-group, .chat-input {
         display: flex;
         flex-direction: column;
         gap: 15px;
@@ -926,7 +931,7 @@
         background-color: var(--button-primary-hover) !important;
     }
 
-    input[type="text"], input[type="file"], .chat-input input[type="text"], textarea[type="text"] {
+    input[type="file"], .chat-input input[type="text"], textarea {
         padding: 14px 18px;
         border: 1px solid var(--input-border-color);
         border-radius: 12px;
@@ -938,14 +943,14 @@
         line-height: var(--line-height);
     }
 
-    input[type="text"]:focus, input[type="file"]:focus, .chat-input input[type="text"]:focus, textarea[type="text"]:focus {
+    input[type="file"]:focus, .chat-input input[type="text"]:focus, textarea:focus {
         border-color: var(--input-focus-border);
         outline: none;
         box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         background-color: var(--bg-color);
     }
 
-    textarea[type="text"] {
+    textarea {
         resize: vertical;
         min-height: 100px;
     }
@@ -1365,17 +1370,6 @@
         border-color: var(--input-focus-border);
     }
 
-    .history-item.generated {
-        border-left: 4px solid #4A90E2; /* Blue for generated */
-    }
-
-    .history-item.modified {
-        border-left: 4px solid #FF5733; /* Orange for modified */
-    }
-
-    .history-item.refined {
-        border-left: 4px solid #28a745; /* Green for refined */
-    }
 
     .history-item img {
         width: 100%;
@@ -1408,10 +1402,6 @@
         gap: 5px;
     }
 
-    .type {
-        font-size: 0.875rem;
-        color: var(--text-muted);
-    }
 
     .timestamp {
         font-size: 0.75rem;
@@ -1627,26 +1617,6 @@
             align-items: flex-start;
         }
     
-        .optimized-prompt {
-            font-size: 0.75rem;
-        }
-
-    }
-
-    .optimized-prompt {
-        font-size: 0.95rem;
-        color: var(--text-secondary);
-        font-family: var(--font-family);
-        margin-top: 12px;
-        text-align: center;
-        padding: 12px;
-        background-color: var(--bg-color);
-        border-radius: 8px;
-        border-left: 3px solid var(--button-primary-bg);
-    }
-
-    .response .optimized-prompt {
-        font-style: italic;
     }
 
     /* Link Styling */
@@ -1700,8 +1670,14 @@
             </div>
             <div class="history-content" class:expanded={isHistoryExpanded}>
                 {#each generatedImages.reverse() as item, index}
-                    <div class="history-item" on:click={(e) => handleHistoryItemClick(item, index, e)}>
-                        <img src={item.imageUrl} alt={"Image " + (index + 1)} />
+                    <div 
+                        class="history-item" 
+                        role="button"
+                        tabindex="0"
+                        on:click={(e) => handleHistoryItemClick(item, index, e)}
+                        on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleHistoryItemClick(item, index, e); } }}
+                    >
+                        <img src={item.imageUrl} alt="" />
                         <div class="prompt-section">
                             <p class="prompt prompt-truncated">Prompt: {item.prompt}</p>
                             <div class="type-and-download">
@@ -1729,7 +1705,6 @@
         <div class="input-group">
             
             <textarea
-                type="text"
                 bind:value={promptInputValue}
                 placeholder="Image Prompt"
                 aria-label="Image prompt"
@@ -1748,10 +1723,10 @@
             </button>
             -->
             <div class="button-container">
-                <button on:click={callStability} disabled={isImageGenLoading}>
+                <button on:click={() => callStability(false)} disabled={isImageGenLoading}>
                     {isImageGenLoading ? 'Generating...' : 'Generate with Prompt'}
                 </button>
-                <button on:click={generateImageWithSketch} disabled={isImageGenLoading || !currentGeneratedImage}>
+                <button on:click={() => generateImageWithSketch()} disabled={isImageGenLoading || !currentGeneratedImage}>
                     {isImageGenLoading ? 'Generating...' : 'Generate with Prompt and Image'}
                 </button>
             </div>
@@ -1827,7 +1802,7 @@
                     <img
                         bind:this={imageElement}
                         src={currentGeneratedImage.imageUrl}
-                        alt="Generated Image"
+                        alt=""
                         on:load={handleImageLoad}
                     />
                     <canvas
@@ -1836,16 +1811,17 @@
                         on:mousemove={draw}
                         on:mouseup={stopDrawing}
                         on:mouseout={stopDrawing}
+                        on:blur={stopDrawing}
                     ></canvas>
                 </div>
                 <h4>Prompt</h4>
                 <p>{currentGeneratedImage.prompt}</p>
                 <h4>Image Description</h4>
-                {#each extractTextBetweenTags(currentGeneratedImage.description, "description") as d}
+                {#each extractTextBetweenTags(String(currentGeneratedImage.description), "description") as d}
                     <p>{d}</p>
                 {/each}
                 <h4>Details</h4>
-                {#each extractTextBetweenTags(currentGeneratedImage.description, "bullet") as d}
+                {#each extractTextBetweenTags(String(currentGeneratedImage.description), "bullet") as d}
                     <p>- {d}</p>
                 {/each}
                 <!--
@@ -1887,7 +1863,7 @@
             </button>
             {#if imageUrl}
             <h4>Uploaded Image:</h4>
-            <img src={imageUrl} alt="Uploaded Image" class="image-preview", style="max-width:50%"/>
+            <img src={imageUrl} alt="" class="image-preview" style="max-width:50%"/>
             <p><strong>URL:</strong> <a href={imageUrl} target="_blank">{imageUrl}</a></p>
             {/if}
         </div>
@@ -1897,19 +1873,19 @@
                     {#if message.role == "assistant" && message.content != "Typing..."}
                         <div class="bot-response">
                             <h4>Sketch Description</h4>
-                            {#each extractTextBetweenTags(message.content, "description") as d}
+                            {#each extractTextBetweenTags(String(message.content), "description") as d}
                                 <p>{d}</p>
                             {/each}
                             <h4>Feelings about the Sketch</h4>
-                            {#each extractTextBetweenTags(message.content, "feeling") as d}
+                            {#each extractTextBetweenTags(String(message.content), "feeling") as d}
                                 <p>{d}</p>
                             {/each}
                             <h4>Suggestions for the Prompt</h4>
-                            {#each extractTextBetweenTags(message.content, "suggestion") as d}
+                            {#each extractTextBetweenTags(String(message.content), "suggestion") as d}
                                 <p>- {d}</p>
                             {/each}
                             <h4>Suggested Prompt</h4>
-                            {#each extractTextBetweenTags(message.content, "prompt") as d}
+                            {#each extractTextBetweenTags(String(message.content), "prompt") as d}
                                 <p>{d}</p>
                             {/each} 
                         </div>
@@ -1926,7 +1902,6 @@
         <div class="chat-input">
             <textarea
                 id="chat-input-box"
-                type="text"
                 bind:value={chatInput}
                 placeholder="Type your message for suggestions from the assistant..."
                 aria-label="Chat input"
