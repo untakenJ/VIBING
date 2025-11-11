@@ -2,7 +2,20 @@
 
 This is the code repository for the CS 2790R project `VIBING: Visual INtuition-Based Interaction for Natural Generation from Painters & Artists` at Harvard University.
 
+For detailed information about the project, methodology, and results, please refer to the [Project Report](https://pub-129b2c8482dc4a708130441b9822b989.r2.dev/VIBING.pdf).
+
 This project is powered by [`Svelte`](https://github.com/sveltejs/svelte).
+
+## Demo
+
+**Live Demo**: [https://vibing-qk67.onrender.com](https://vibing-qk67.onrender.com)
+
+**Note**: The demo has been beautified and the user interaction experience has been slightly improved by Lingze after the class. However, the core logic and functionality of the original prototype remain unchanged.
+
+**Maintenance**: This live demo is currently maintained by Lingze (GitHub: [@untakenJ](https://github.com/untakenJ)). If the API tokens are exhausted, please contact him.
+
+
+
 
 <!-- ## Creating a project
 
@@ -158,5 +171,6 @@ These are server-side environment variables that will never be exposed to the cl
 
 > For more information about adapters, see [SvelteKit adapters documentation](https://svelte.dev/docs/kit/adapters).
 
-## Demo
+## Local Development Demo
+
 Once the service is running with `npm run dev`, you may access the application through the browser. The default port would be `5173`. The final version of our application can be accessed with [http://localhost:5173](http://localhost:5173) and the baseline system is at [http://localhost:5173/vibing_baseline](http://localhost:5173/vibing_baseline).
