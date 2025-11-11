@@ -2,9 +2,11 @@
 
 This is the code repository for the CS 2790R project `VIBING: Visual INtuition-Based Interaction for Natural Generation from Painters & Artists` at Harvard University.
 
+This project is powered by [`Svelte`](https://github.com/sveltejs/svelte).
+
+## Project Report
 For detailed information about the project, methodology, and results, please refer to the [Project Report](https://pub-129b2c8482dc4a708130441b9822b989.r2.dev/VIBING.pdf).
 
-This project is powered by [`Svelte`](https://github.com/sveltejs/svelte).
 
 ## Demo
 
